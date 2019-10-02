@@ -394,6 +394,26 @@ auto update_default_floor(T&& state, uint64_t speed)
     };
 }
 
+/**
+ * @brief An action to conditionally set the floor speed on a zone
+ * @details Based on the average of the defined sensor group values, the floor
+ * speed is selected from the first map key entry that the average sensor value
+ * is less than when all of the given group members property values match what
+ * they were configured.
+ *
+ * @param[in] pg - Precondition property group of property values
+ * @param[in] val_to_speed - Ordered map of sensor value-to-speed
+ *
+ * @return Action lambda function
+ *     An Action function to set the zone's floor speed when the average of
+ *     property values within the group is below the lowest sensor value given
+ *     and all of the group members property values match their configured
+ *     values.
+ */
+Action conditionally_set_floor_from_average_sensor_value(
+        std::vector<PrecondGroup>&& pg,
+        std::map<int64_t, uint64_t>&& val_to_speed);
+
 } // namespace action
 } // namespace control
 } // namespace fan
