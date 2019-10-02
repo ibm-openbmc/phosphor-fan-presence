@@ -105,10 +105,7 @@ struct PropertyChanged
             auto it = properties.find(_property);
             if (it == properties.cend())
             {
-                log<level::ERR>("Unable to find property on interface",
-                                entry("PROPERTY=%s", _property),
-                                entry("INTERFACE=%s", _iface),
-                                entry("PATH=%s", _path));
+                // Property not included in dictionary of properties changed
                 return;
             }
 
