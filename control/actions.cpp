@@ -285,6 +285,86 @@ Action set_ceiling_from_average_sensor_value(
     };
 }
 
+Action conditionally_set_floor_from_average_sensor_value(
+        std::vector<PrecondGroup>&& pg,
+        std::map<int64_t, uint64_t>&& val_to_speed)
+{
+    return [pg = std::move(pg),
+            val_to_speed = std::move(val_to_speed)](control::Zone& zone,
+                                                    const Group& group)
+    {
+        auto preGrp = std::all_of(
+            pg.begin(),
+            pg.end(),
+            [&zone](auto const& entry)
+            {
+                try
+                {
+                    return zone.getPropValueVariant(
+                        std::get<pcPathPos>(entry),
+                        std::get<pcIntfPos>(entry),
+                        std::get<pcPropPos>(entry)) ==
+                                std::get<pcValuePos>(entry);
+                }
+                catch (const std::out_of_range& oore)
+                {
+                    // Default to property variants not equal when not found
+                    return false;
+                }
+            });
+
+        if (!preGrp)
+        {
+            // Do not update the floor speed
+            return;
+        }
+
+        auto speed = zone.getDefFloor();
+        if (group.size() != 0)
+        {
+            auto count = 0;
+            auto sumValue = std::accumulate(
+                    group.begin(),
+                    group.end(),
+                    0,
+                    [&zone, &count](int64_t sum, auto const& entry)
+                    {
+                        try
+                        {
+                            return sum +
+                                zone.template getPropertyValue<int64_t>(
+                                    entry.first,
+                                    std::get<intfPos>(entry.second),
+                                    std::get<propPos>(entry.second));
+                        }
+                        catch (const std::out_of_range& oore)
+                        {
+                            count++;
+                            return sum;
+                        }
+                    });
+            if ((group.size() - count) > 0)
+            {
+                auto groupSize = static_cast<int64_t>(group.size());
+                auto avgValue = sumValue / (groupSize - count);
+                auto it = std::find_if(
+                    val_to_speed.begin(),
+                    val_to_speed.end(),
+                    [&avgValue](auto const& entry)
+                    {
+                        return avgValue < entry.first;
+                    }
+                );
+                if (it != std::end(val_to_speed))
+                {
+                    speed = (*it).second;
+                }
+            }
+        }
+        zone.setFloor(speed);
+    };
+}
+
 } // namespace action
 } // namespace control
 } // namespace fan

@@ -317,6 +317,28 @@ def getActions(zNum, zCond, edata, actions, events):
                             param += (
                                 str(eActions[p]['type']).lower() +
                                 ">(" + str(eActions[p]['value']).lower() + ")")
+                    elif p == 'groups':
+                        pGrps = getGroups(zNum,
+                                          zCond,
+                                          eActions,
+                                          events)
+                        param = "std::vector<PrecondGroup>{\n"
+                        for g in pGrps:
+                            for m in g['members']:
+                                param += "PrecondGroup{"
+                                param += ("\"" + m['object'] + "\",")
+                                param += ("\"" + m['interface'] + "\",")
+                                param += ("\"" + m['property'] + "\",")
+                                param += ("static_cast<" +
+                                    str(m['type']).lower() + ">")
+                                if isinstance(m['value'], str) or \
+                                   "string" in str(m['type']).lower():
+                                    param += ("(" + str(m['value']) + ")")
+                                else:
+                                    param += \
+                                        ("(" + str(m['value']).lower() + ")")
+                                param += "},\n"
+                        param += "}"
                     else:
                         # Default type to 'size_t' when not given
                         param += ("size_t>(" + str(eActions[p]).lower() + ")")
