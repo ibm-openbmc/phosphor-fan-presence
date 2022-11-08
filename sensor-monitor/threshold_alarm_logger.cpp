@@ -44,6 +44,9 @@ constexpr auto errorNameBase = "xyz.openbmc_project.Sensor.Threshold.Error.";
 constexpr auto valueInterface = "xyz.openbmc_project.Sensor.Value";
 constexpr auto assocInterface = "xyz.openbmc_project.Association";
 
+const std::vector<std::string> thresholdIfaceNames{
+    warningInterface, criticalInterface, perfLossInterface};
+
 using ErrorData = std::tuple<ErrorName, Entry::Level>;
 
 /**
@@ -112,7 +115,12 @@ ThresholdAlarmLogger::ThresholdAlarmLogger(
                        "type='signal',member='InterfacesRemoved',arg0path="
                        "'/xyz/openbmc_project/sensors/'",
                        std::bind(&ThresholdAlarmLogger::interfacesRemoved, this,
-                                 std::placeholders::_1))
+                                 std::placeholders::_1)),
+    ifacesAddedMatch(bus,
+                     "type='signal',member='InterfacesAdded',arg0path="
+                     "'/xyz/openbmc_project/sensors/'",
+                     std::bind(&ThresholdAlarmLogger::interfacesAdded, this,
+                               std::placeholders::_1))
 {
     _powerState->addCallback("thresholdMon",
                              std::bind(&ThresholdAlarmLogger::powerStateChanged,
@@ -143,6 +151,47 @@ void ThresholdAlarmLogger::propertiesChanged(sdbusplus::message::message& msg)
 
     msg.read(interface, properties);
 
+    checkProperties(sensorPath, interface, properties);
+}
+
+void ThresholdAlarmLogger::interfacesRemoved(sdbusplus::message_t& msg)
+{
+    sdbusplus::message::object_path path;
+    std::vector<std::string> interfaces;
+
+    msg.read(path, interfaces);
+
+    for (const auto& interface : interfaces)
+    {
+        if (std::find(thresholdIfaceNames.begin(), thresholdIfaceNames.end(),
+                      interface) != thresholdIfaceNames.end())
+        {
+            alarms.erase(InterfaceKey{path, interface});
+        }
+    }
+}
+
+void ThresholdAlarmLogger::interfacesAdded(sdbusplus::message_t& msg)
+{
+    sdbusplus::message::object_path path;
+    std::map<std::string, std::map<std::string, std::variant<bool>>> interfaces;
+
+    msg.read(path, interfaces);
+
+    for (const auto& [interface, properties] : interfaces)
+    {
+        if (std::find(thresholdIfaceNames.begin(), thresholdIfaceNames.end(),
+                      interface) != thresholdIfaceNames.end())
+        {
+            checkProperties(path, interface, properties);
+        }
+    }
+}
+
+void ThresholdAlarmLogger::checkProperties(
+    const std::string& sensorPath, const std::string& interface,
+    const std::map<std::string, std::variant<bool>>& properties)
+{
     auto alarmProperties = thresholdData.find(interface);
     if (alarmProperties == thresholdData.end())
     {
@@ -176,25 +225,6 @@ void ThresholdAlarmLogger::propertiesChanged(sdbusplus::message::message& msg)
                                    alarmValue);
                 }
             }
-        }
-    }
-}
-
-void ThresholdAlarmLogger::interfacesRemoved(sdbusplus::message::message& msg)
-{
-    static const std::vector<std::string> thresholdNames{
-        warningInterface, criticalInterface, perfLossInterface};
-    sdbusplus::message::object_path path;
-    std::vector<std::string> interfaces;
-
-    msg.read(path, interfaces);
-
-    for (const auto& interface : interfaces)
-    {
-        if (std::find(thresholdNames.begin(), thresholdNames.end(),
-                      interface) != thresholdNames.end())
-        {
-            alarms.erase(InterfaceKey{path, interface});
         }
     }
 }
@@ -374,6 +404,8 @@ void ThresholdAlarmLogger::powerStateChanged(bool powerStateOn)
 
 void ThresholdAlarmLogger::checkThresholds()
 {
+    std::vector<InterfaceKey> toErase;
+
     for (const auto& [interfaceKey, alarmMap] : alarms)
     {
         for (const auto& [propertyName, alarmValue] : alarmMap)
@@ -382,10 +414,35 @@ void ThresholdAlarmLogger::checkThresholds()
             {
                 const auto& sensorPath = std::get<0>(interfaceKey);
                 const auto& interface = std::get<1>(interfaceKey);
+                std::string service;
 
-                createEventLog(sensorPath, interface, propertyName, alarmValue);
+                try
+                {
+                    // Check that the service that provides the alarm is still
+                    // running, because if it died when the alarm was active
+                    // there would be no indication of it unless we listened
+                    // for NameOwnerChanged and tracked services, and this is
+                    // easier.
+                    service = SDBusPlus::getService(bus, sensorPath, interface);
+                }
+                catch (const DBusServiceError& e)
+                {
+                    // No longer on D-Bus delete the alarm entry
+                    toErase.emplace_back(sensorPath, interface);
+                }
+
+                if (!service.empty())
+                {
+                    createEventLog(sensorPath, interface, propertyName,
+                                   alarmValue);
+                }
             }
         }
+    }
+
+    for (const auto& e : toErase)
+    {
+        alarms.erase(e);
     }
 }
 
