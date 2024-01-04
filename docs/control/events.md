@@ -370,14 +370,15 @@ The above config uses a parameter as the state value:
     "name": "count_state_floor",
     "count": 2,
     "state": false,
-    "floor": 18000
+    "floor": 18000,
+    "delay": 3
 }
 ```
 
 The above config reads the configured D-Bus property on each group member
-configured for the action.  If two or more members have a property value of
-false, a floor hold will be requested with a value of 18000.  Otherwise, the
-floor hold will be released (if it was previously requested).
+configured for the action. If two or more members have a property value of false
+for 3 seconds, a floor hold will be requested with a value of 18000. Otherwise,
+the floor hold will be released (if it was previously requested).
 
 ### count_state_before_target
 Sets the fans to a configured target when a number of members within the group
