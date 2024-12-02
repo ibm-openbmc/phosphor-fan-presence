@@ -7,6 +7,7 @@ sources = [
     'json_parser.cpp',
     'logging.cpp',
     'main.cpp',
+    'malfunction_monitor.cpp',
     'power_interface.cpp',
     'system.cpp',
     'tach_sensor.cpp',
@@ -14,6 +15,7 @@ sources = [
 ]
 
 deps = [
+    libgpiodcxx_dep,
     nlohmann_json_dep,
     phosphor_dbus_interfaces_dep,
     phosphor_logging_dep,
