@@ -97,9 +97,12 @@ void Fan::setZone(const json& jsonObj)
 
 void Fan::setTarget(uint64_t target)
 {
-    if ((_target == target) || !_lockedTargets.empty())
+    // If there is a target lock, continue but use
+    // the highest locked value.
+    auto maxLock = std::ranges::max_element(_lockedTargets);
+    if (maxLock != _lockedTargets.end())
     {
-        return;
+        target = *maxLock;
     }
 
     for (const auto& sensor : _sensors)
